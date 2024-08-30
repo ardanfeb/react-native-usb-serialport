@@ -13,8 +13,8 @@ buildscript {
 apply plugin: 'com.android.library'
 
 android {
-    compileSdkVersion 28
-    buildToolsVersion "28.0.3"
+    compileSdkVersion 33
+    buildToolsVersion "33.0.0"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -22,8 +22,8 @@ android {
     }
 
     defaultConfig {
-        minSdkVersion 16
-        targetSdkVersion 28
+        minSdkVersion 23
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
     }
@@ -40,4 +40,5 @@ dependencies {
     implementation 'com.vdurmont:semver4j:3.1.0'
     implementation 'com.facebook.react:react-native:+'
     compileOnly fileTree(dir: 'libs', include: ['*.aar'])
+    // compileOnly files('libs/usbserial-6.0.5-release.aar')
 }
