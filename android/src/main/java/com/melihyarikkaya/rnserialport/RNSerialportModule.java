@@ -735,14 +735,35 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
   }
 
   private void requestUserPermission(UsbDevice device) {
+    int FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT =  16777216;
+    
     if(device == null)
       return;
     PendingIntent mPendingIntent = null;
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-      mPendingIntent = PendingIntent.getBroadcast(mReactContext, 0, new Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_MUTABLE);
-      // mPendingIntent = PendingIntent.getBroadcast(mReactContext, 0, new Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE);
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+      // For Android 14+ (API 34+)
+      mPendingIntent = PendingIntent.getBroadcast(
+          mReactContext, 
+          0, 
+          new Intent(ACTION_USB_PERMISSION), 
+          PendingIntent.FLAG_MUTABLE | FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT
+      );
+    } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+      // For Android 12 (API 31-32)
+      mPendingIntent = PendingIntent.getBroadcast(
+          mReactContext, 
+          0, 
+          new Intent(ACTION_USB_PERMISSION), 
+          PendingIntent.FLAG_MUTABLE
+      );
     } else {
-      mPendingIntent = PendingIntent.getBroadcast(mReactContext, 0 , new Intent(ACTION_USB_PERMISSION), 0);
+      // For older Android versions
+      mPendingIntent = PendingIntent.getBroadcast(
+          mReactContext, 
+          0, 
+          new Intent(ACTION_USB_PERMISSION), 
+          0
+      );
     }
     usbManager.requestPermission(device, mPendingIntent);
   }
