@@ -227,7 +227,12 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
     filter.addAction(ACTION_USB_PERMISSION);
     filter.addAction(ACTION_USB_ATTACHED);
     filter.addAction(ACTION_USB_DETACHED);
-    mReactContext.registerReceiver(mUsbReceiver, filter);
+
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+      mReactContext.registerReceiver(mUsbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+    } else {
+      mReactContext.registerReceiver(mUsbReceiver, filter);
+    }
   }
 
   private void fillDriverList() {
@@ -735,34 +740,36 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
   }
 
   private void requestUserPermission(UsbDevice device) {
-    int FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT =  16777216;
-    
     if(device == null)
       return;
-    PendingIntent mPendingIntent = null;
+      
+    Intent intent = new Intent(ACTION_USB_PERMISSION);
+    intent.setPackage(mReactContext.getPackageName());
+    
+    PendingIntent mPendingIntent;
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
       // For Android 14+ (API 34+)
       mPendingIntent = PendingIntent.getBroadcast(
           mReactContext, 
           0, 
-          new Intent(ACTION_USB_PERMISSION), 
-          PendingIntent.FLAG_MUTABLE | FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT
+          intent, 
+          PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
       );
     } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-      // For Android 12 (API 31-32)
+      // For Android 12 (API 31-33)
       mPendingIntent = PendingIntent.getBroadcast(
           mReactContext, 
           0, 
-          new Intent(ACTION_USB_PERMISSION), 
-          PendingIntent.FLAG_MUTABLE
+          intent, 
+          PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
       );
     } else {
       // For older Android versions
       mPendingIntent = PendingIntent.getBroadcast(
           mReactContext, 
           0, 
-          new Intent(ACTION_USB_PERMISSION), 
-          0
+          intent, 
+          PendingIntent.FLAG_UPDATE_CURRENT
       );
     }
     usbManager.requestPermission(device, mPendingIntent);
@@ -771,11 +778,26 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
   private void startConnection(UsbDevice device, boolean granted) {
     if(granted) {
       Intent intent = new Intent(ACTION_USB_PERMISSION_GRANTED);
+      intent.setPackage(mReactContext.getPackageName());
       mReactContext.sendBroadcast(intent);
-      UsbDeviceConnection connection = usbManager.openDevice(device);
-      new ConnectionThread(device, connection).start();
+      
+      try {
+        UsbDeviceConnection connection = usbManager.openDevice(device);
+        if (connection != null) {
+          new ConnectionThread(device, connection).start();
+        } else {
+          Intent errorIntent = new Intent(ACTION_USB_NOT_OPENED);
+          errorIntent.setPackage(mReactContext.getPackageName());
+          mReactContext.sendBroadcast(errorIntent);
+        }
+      } catch (Exception e) {
+        WritableMap map = createError(Definitions.ERROR_CONNECTION_FAILED, Definitions.ERROR_CONNECTION_FAILED_MESSAGE);
+        map.putString("exceptionErrorMessage", e.getMessage());
+        eventEmit(onErrorEvent, map);
+      }
     } else {
       Intent intent = new Intent(ACTION_USB_PERMISSION_NOT_GRANTED);
+      intent.setPackage(mReactContext.getPackageName());
       mReactContext.sendBroadcast(intent);
     }
   }

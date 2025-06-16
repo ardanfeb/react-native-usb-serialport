@@ -1,7 +1,31 @@
-
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           package="com.melihyarikkaya.rnserialport">
     <uses-feature android:name="android.hardware.usb.host"
         android:required="true"/>
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
+    <application>
+        <receiver 
+            android:name=".RNSerialportModule$mUsbReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.felhr.connectivityservices.USB_READY" />
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+                <action android:name="android.hardware.usb.action.USB_DEVICE_DETACHED" />
+                <action android:name="com.felhr.usbservice.USB_NOT_SUPPORTED" />
+                <action android:name="com.felhr.usbservice.NO_USB" />
+                <action android:name="com.felhr.usbservice.USB_PERMISSION_GRANTED" />
+                <action android:name="com.felhr.usbservice.USB_PERMISSION_NOT_GRANTED" />
+                <action android:name="com.android.example.USB_PERMISSION" />
+                <action android:name="com.melihyarikkaya.rnserialport.USB_NOT_OPENED" />
+                <action android:name="com.melihyarikkaya.rnserialport.USB_CONNECT" />
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>
