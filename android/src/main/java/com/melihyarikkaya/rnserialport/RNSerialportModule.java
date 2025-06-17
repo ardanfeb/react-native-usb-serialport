@@ -148,14 +148,14 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
 
         switch (action) {
           case ACTION_USB_CONNECT:
-            String deviceName = arg1.getExtras() != null ? arg1.getExtras().getString(EXTRA_USB_DEVICE_NAME) : null;
-            Log.d(TAG, "USB connected: " + deviceName);
-            eventEmit(onConnectedEvent, deviceName);
+            String connectedDeviceName = arg1.getExtras() != null ? arg1.getExtras().getString(EXTRA_USB_DEVICE_NAME) : null;
+            Log.d(TAG, "USB connected: " + connectedDeviceName);
+            eventEmit(onConnectedEvent, connectedDeviceName);
             break;
           case ACTION_USB_DISCONNECTED:
-            deviceName = arg1.getExtras() != null ? arg1.getExtras().getString(EXTRA_USB_DEVICE_NAME) : null;
-            Log.d(TAG, "USB disconnected: " + deviceName);
-            eventEmit(onDisconnectedEvent, deviceName);
+            String disconnectedDeviceName = arg1.getExtras() != null ? arg1.getExtras().getString(EXTRA_USB_DEVICE_NAME) : null;
+            Log.d(TAG, "USB disconnected: " + disconnectedDeviceName);
+            eventEmit(onDisconnectedEvent, disconnectedDeviceName);
             break;
           case ACTION_USB_NOT_SUPPORTED:
             Log.e(TAG, "USB device not supported");
@@ -168,9 +168,9 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
           case ACTION_USB_ATTACHED: {
             UsbDevice device = arg1.getExtras() != null ? arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE) : null;
             if (device != null) {
-              String deviceName = device.getDeviceName();
-              Log.d(TAG, "USB device attached: " + deviceName);
-              eventEmit(onDeviceAttachedEvent, deviceName);
+              String attachedDeviceName = device.getDeviceName();
+              Log.d(TAG, "USB device attached: " + attachedDeviceName);
+              eventEmit(onDeviceAttachedEvent, attachedDeviceName);
               if(autoConnect && chooseFirstDevice()) {
                 connectDevice(autoConnectDeviceName, autoConnectBaudRate);
               }
@@ -180,12 +180,12 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
           case ACTION_USB_DETACHED: {
             UsbDevice device = arg1.getExtras() != null ? arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE) : null;
             if (device != null) {
-              String deviceName = device.getDeviceName();
-              Log.d(TAG, "USB device detached: " + deviceName);
-              eventEmit(onDeviceDetachedEvent, deviceName);
-              stopConnection(deviceName);
-              serialPorts.remove(deviceName);
-              appBus2DeviceName.values().removeIf(deviceName::equals);
+              String detachedDeviceName = device.getDeviceName();
+              Log.d(TAG, "USB device detached: " + detachedDeviceName);
+              eventEmit(onDeviceDetachedEvent, detachedDeviceName);
+              stopConnection(detachedDeviceName);
+              serialPorts.remove(detachedDeviceName);
+              appBus2DeviceName.values().removeIf(detachedDeviceName::equals);
             }
           }
             break;
@@ -207,7 +207,7 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
         }
       } catch (Exception e) {
         Log.e(TAG, "Error in USB receiver: " + e.getMessage(), e);
-        eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, e.getMessage()));
+        eventEmit(onErrorEvent, createError(Definitions.ERROR_DEVICE_NOT_SUPPORTED, e.getMessage()));
       }
     }
   };
@@ -367,13 +367,15 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
   public void onHostPause() {}
 
   @Override
-  public void onHostDestroy() {}
+  public void onHostDestroy() {
+    disconnectAllDevices();
+    stopUsbService();
+  }
 
   @Override
   public void onCatalystInstanceDestroy() {
-    super.onCatalystInstanceDestroy();
-    disconnectAllDevices();
-    stopUsbService();
+    // This method is deprecated, use onHostDestroy instead
+    onHostDestroy();
   }
 
   @ReactMethod
@@ -665,10 +667,25 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
   private class ConnectionThread extends Thread {
     private UsbDevice device;
     private UsbDeviceConnection connection;
+    private UsbSerialInterface.UsbReadCallback mCallback;
 
     public ConnectionThread(UsbDevice device, UsbDeviceConnection connection) {
       this.device = device;
       this.connection = connection;
+      this.mCallback = new UsbSerialInterface.UsbReadCallback() {
+        @Override
+        public void onReceivedData(byte[] arg0) {
+          try {
+            if (isNativeGatewayJsEventEmitOnSerialportData) {
+              WritableMap params = Arguments.createMap();
+              params.putString("data", Base64.encodeToString(arg0, Base64.NO_WRAP));
+              eventEmit(onReadDataFromPort, params);
+            }
+          } catch (Exception e) {
+            Log.e(TAG, "Error in USB read callback: " + e.getMessage(), e);
+          }
+        }
+      };
     }
 
     @Override
