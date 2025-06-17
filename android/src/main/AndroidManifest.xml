@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          package="com.melihyarikkaya.rnserialport">
-    <uses-feature android:name="android.hardware.usb.host"
-        android:required="true"/>
+    xmlns:tools="http://schemas.android.com/tools">
+
     <uses-permission android:name="android.permission.USB_PERMISSION" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="true"/>
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -16,17 +16,17 @@
     
     <application
         android:name="androidx.multidex.MultiDexApplication"
-        android:requestLegacyExternalStorage="true">
-        <receiver 
-            android:name=".RNSerialportModule$mUsbReceiver"
-            android:exported="true"
+        android:requestLegacyExternalStorage="true"
+        tools:node="merge">
+        <receiver
+            android:name=".UsbBroadcastReceiver"
             android:enabled="true"
+            android:exported="true"
             android:permission="android.permission.BIND_USB_DEVICE">
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
                 <action android:name="android.hardware.usb.action.USB_DEVICE_DETACHED" />
                 <action android:name="android.hardware.usb.action.USB_PERMISSION" />
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
     </application>
