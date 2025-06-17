@@ -769,15 +769,15 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
           new ConnectionThread(device, connection).start();
         } else {
           Log.e(TAG, "Could not open USB connection");
-          eventEmit(onErrorEvent, createError(Definitions.ERROR_COULD_NOT_OPEN_SERIALPORT, "Could not open USB connection"));
+          eventEmit(onErrorEvent, createError(Definitions.ERROR_COULD_NOT_OPEN_SERIALPORT, Definitions.ERROR_COULD_NOT_OPEN_SERIALPORT_MESSAGE));
         }
       } else {
         Log.e(TAG, "USB permission denied");
-        eventEmit(onErrorEvent, createError(Definitions.ERROR_USER_DID_NOT_ALLOW_TO_CONNECT, "USB permission denied"));
+        eventEmit(onErrorEvent, createError(Definitions.ERROR_USER_DID_NOT_ALLOW_TO_CONNECT, Definitions.ERROR_USER_DID_NOT_ALLOW_TO_CONNECT_MESSAGE));
       }
     } catch (Exception e) {
       Log.e(TAG, "Error starting USB connection: " + e.getMessage(), e);
-      eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, e.getMessage()));
+      eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, Definitions.ERROR_UNKNOWN_MESSAGE + ": " + e.getMessage()));
     }
   }
 
