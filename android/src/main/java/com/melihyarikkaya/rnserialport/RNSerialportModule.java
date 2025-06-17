@@ -759,8 +759,14 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
     intent.setPackage(mReactContext.getPackageName());
     
     PendingIntent mPendingIntent;
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-      // For Android 14+ (API 34+)
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      mPendingIntent = PendingIntent.getBroadcast(
+          mReactContext, 
+          0, 
+          intent, 
+          PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+      );
+    } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
       mPendingIntent = PendingIntent.getBroadcast(
           mReactContext, 
           0, 
@@ -768,7 +774,6 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
           PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
       );
     } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-      // For Android 12 (API 31-33)
       mPendingIntent = PendingIntent.getBroadcast(
           mReactContext, 
           0, 
@@ -776,7 +781,6 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
           PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
       );
     } else {
-      // For older Android versions
       mPendingIntent = PendingIntent.getBroadcast(
           mReactContext, 
           0, 
@@ -786,7 +790,11 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
     }
 
     try {
-      usbManager.requestPermission(device, mPendingIntent);
+      if (usbManager.hasPermission(device)) {
+        startConnection(device, true);
+      } else {
+        usbManager.requestPermission(device, mPendingIntent);
+      }
     } catch (Exception e) {
       Log.e(TAG, "Error requesting USB permission: " + e.getMessage(), e);
       eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, "Failed to request USB permission: " + e.getMessage()));
@@ -815,18 +823,23 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
   }
 
   private void stopConnection(String deviceName) {
-    UsbSerialDevice serialPort = serialPorts.get(deviceName);
-    if(serialPort == null) {
-      eventEmit(onErrorEvent, createError(Definitions.ERROR_THERE_IS_NO_CONNECTION, Definitions.ERROR_THERE_IS_NO_CONNECTION_MESSAGE));
-      return;
+    try {
+      UsbSerialDevice serialPort = serialPorts.get(deviceName);
+      if(serialPort == null) {
+        eventEmit(onErrorEvent, createError(Definitions.ERROR_THERE_IS_NO_CONNECTION, Definitions.ERROR_THERE_IS_NO_CONNECTION_MESSAGE));
+        return;
+      }
+
+      serialPort.close();
+      appBus2DeviceName.values().removeIf(deviceName::equals);
+
+      Intent intent = new Intent(ACTION_USB_DISCONNECTED);
+      intent.putExtra(EXTRA_USB_DEVICE_NAME, deviceName);
+      mReactContext.sendBroadcast(intent);
+    } catch (Exception e) {
+      Log.e(TAG, "Error stopping USB connection: " + e.getMessage(), e);
+      eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, "Failed to stop USB connection: " + e.getMessage()));
     }
-
-    serialPort.close();
-    appBus2DeviceName.values().removeIf(deviceName::equals);
-
-    Intent intent = new Intent(ACTION_USB_DISCONNECTED);
-    intent.putExtra(EXTRA_USB_DEVICE_NAME, deviceName);
-    mReactContext.sendBroadcast(intent);
   }
 
   ///////////////////////////////////////////////TCP Socket /////////////////////////////////////////////////////////
