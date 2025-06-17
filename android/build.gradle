@@ -5,36 +5,40 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.4.2'
+        classpath 'com.android.tools.build:gradle:8.1.0'
     }
 }
 
 apply plugin: 'com.android.library'
 
 android {
-    compileSdkVersion 34
-    buildToolsVersion "34.0.0"
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
+    compileSdkVersion 35
+    buildToolsVersion "35.0.0"
 
     defaultConfig {
         minSdkVersion 23
-        targetSdkVersion 34
+        targetSdkVersion 35
         versionCode 1
         versionName "1.0"
-        
-        // Add support for Android 13+
         buildConfigField "boolean", "IS_NEW_OREO", "true"
     }
-    
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
     lintOptions {
         abortOnError false
     }
     
-    // Add support for Android 13+
     packagingOptions {
         exclude 'META-INF/DEPENDENCIES'
         exclude 'META-INF/LICENSE'
@@ -58,5 +62,7 @@ dependencies {
     implementation 'com.facebook.react:react-native:+'
     implementation 'com.github.felHR85:UsbSerial:6.1.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.core:core:1.12.0'
     implementation 'androidx.core:core-ktx:1.12.0'
 }

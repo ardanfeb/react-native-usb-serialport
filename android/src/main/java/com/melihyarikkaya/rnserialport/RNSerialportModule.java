@@ -274,10 +274,15 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
     filter.addAction(ACTION_USB_ATTACHED);
     filter.addAction(ACTION_USB_DETACHED);
 
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-      mReactContext.registerReceiver(mUsbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-    } else {
-      mReactContext.registerReceiver(mUsbReceiver, filter);
+    try {
+      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        mReactContext.registerReceiver(mUsbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+      } else {
+        mReactContext.registerReceiver(mUsbReceiver, filter);
+      }
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering USB receiver: " + e.getMessage(), e);
+      eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, "Failed to register USB receiver: " + e.getMessage()));
     }
   }
 
@@ -779,7 +784,13 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
           PendingIntent.FLAG_UPDATE_CURRENT
       );
     }
-    usbManager.requestPermission(device, mPendingIntent);
+
+    try {
+      usbManager.requestPermission(device, mPendingIntent);
+    } catch (Exception e) {
+      Log.e(TAG, "Error requesting USB permission: " + e.getMessage(), e);
+      eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, "Failed to request USB permission: " + e.getMessage()));
+    }
   }
 
   private void startConnection(UsbDevice device, boolean granted) {
