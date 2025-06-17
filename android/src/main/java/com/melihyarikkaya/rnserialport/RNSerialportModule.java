@@ -178,14 +178,36 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
           }
             break;
           case ACTION_USB_DETACHED: {
-            UsbDevice device = arg1.getExtras() != null ? arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE) : null;
-            if (device != null) {
-              String detachedDeviceName = device.getDeviceName();
-              Log.d(TAG, "USB device detached: " + detachedDeviceName);
-              eventEmit(onDeviceDetachedEvent, detachedDeviceName);
-              stopConnection(detachedDeviceName);
-              serialPorts.remove(detachedDeviceName);
-              appBus2DeviceName.values().removeIf(detachedDeviceName::equals);
+            try {
+              UsbDevice device = arg1.getExtras() != null ? arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE) : null;
+              if (device != null) {
+                String detachedDeviceName = device.getDeviceName();
+                Log.d(TAG, "USB device detached: " + detachedDeviceName);
+                
+                // Safely close the connection
+                if (serialPorts.containsKey(detachedDeviceName)) {
+                  UsbSerialDevice serialPort = serialPorts.get(detachedDeviceName);
+                  if (serialPort != null) {
+                    try {
+                      serialPort.close();
+                    } catch (Exception e) {
+                      Log.e(TAG, "Error closing serial port: " + e.getMessage());
+                    }
+                  }
+                  serialPorts.remove(detachedDeviceName);
+                }
+                
+                // Clean up device mappings
+                appBus2DeviceName.values().removeIf(detachedDeviceName::equals);
+                deviceName2SocketId.remove(detachedDeviceName);
+                
+                // Emit events
+                eventEmit(onDeviceDetachedEvent, detachedDeviceName);
+                eventEmit(onDisconnectedEvent, detachedDeviceName);
+              }
+            } catch (Exception e) {
+              Log.e(TAG, "Error handling USB detachment: " + e.getMessage(), e);
+              eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, Definitions.ERROR_UNKNOWN_MESSAGE + ": " + e.getMessage()));
             }
           }
             break;
@@ -207,7 +229,7 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
         }
       } catch (Exception e) {
         Log.e(TAG, "Error in USB receiver: " + e.getMessage(), e);
-        eventEmit(onErrorEvent, createError(Definitions.ERROR_DEVICE_NOT_SUPPORTED, e.getMessage()));
+        eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, Definitions.ERROR_UNKNOWN_MESSAGE + ": " + e.getMessage()));
       }
     }
   };
