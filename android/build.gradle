@@ -25,20 +25,38 @@ android {
         targetSdkVersion 34
         versionCode 1
         versionName "1.0"
+        
+        // Add support for Android 13+
+        buildConfigField "boolean", "IS_NEW_OREO", "true"
     }
+    
     lintOptions {
         abortOnError false
+    }
+    
+    // Add support for Android 13+
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/license.txt'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/notice.txt'
+        exclude 'META-INF/ASL2.0'
     }
 }
 
 repositories {
     google()
     mavenCentral()
+    maven { url "https://jitpack.io" }
 }
 
 dependencies {
     implementation 'com.vdurmont:semver4j:3.1.0'
     implementation 'com.facebook.react:react-native:+'
-    compileOnly fileTree(dir: 'libs', include: ['*.aar'])
-    // compileOnly files('libs/usbserial-6.0.5-release.aar')
+    implementation 'com.github.felHR85:UsbSerial:6.1.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.12.0'
 }

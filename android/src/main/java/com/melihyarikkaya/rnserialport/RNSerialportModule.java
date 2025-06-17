@@ -29,6 +29,7 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.Network;
 import android.util.Base64;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -140,50 +141,73 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
   private final BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
     @Override
     public void onReceive(Context arg0, Intent arg1) {
-      Intent intent;
-      switch (arg1.getAction()) {
-        case ACTION_USB_CONNECT:
-          eventEmit(onConnectedEvent, arg1.getExtras().getString(EXTRA_USB_DEVICE_NAME));
-          break;
-        case ACTION_USB_DISCONNECTED:
-          eventEmit(onDisconnectedEvent, arg1.getExtras().getString(EXTRA_USB_DEVICE_NAME));
-          break;
-        case ACTION_USB_NOT_SUPPORTED:
-          eventEmit(onErrorEvent, createError(Definitions.ERROR_DEVICE_NOT_SUPPORTED, Definitions.ERROR_DEVICE_NOT_SUPPORTED_MESSAGE));
-          break;
-        case ACTION_USB_NOT_OPENED:
-          eventEmit(onErrorEvent, createError(Definitions.ERROR_COULD_NOT_OPEN_SERIALPORT, Definitions.ERROR_COULD_NOT_OPEN_SERIALPORT_MESSAGE));
-          break;
-        case ACTION_USB_ATTACHED: {
-          UsbDevice device = arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE);
-          String deviceName = device.getDeviceName();
-          eventEmit(onDeviceAttachedEvent, deviceName);
-          if(autoConnect && chooseFirstDevice()) {
-            connectDevice(autoConnectDeviceName, autoConnectBaudRate);
+      try {
+        Intent intent;
+        String action = arg1.getAction();
+        Log.d(TAG, "USB event received: " + action);
+
+        switch (action) {
+          case ACTION_USB_CONNECT:
+            String deviceName = arg1.getExtras() != null ? arg1.getExtras().getString(EXTRA_USB_DEVICE_NAME) : null;
+            Log.d(TAG, "USB connected: " + deviceName);
+            eventEmit(onConnectedEvent, deviceName);
+            break;
+          case ACTION_USB_DISCONNECTED:
+            deviceName = arg1.getExtras() != null ? arg1.getExtras().getString(EXTRA_USB_DEVICE_NAME) : null;
+            Log.d(TAG, "USB disconnected: " + deviceName);
+            eventEmit(onDisconnectedEvent, deviceName);
+            break;
+          case ACTION_USB_NOT_SUPPORTED:
+            Log.e(TAG, "USB device not supported");
+            eventEmit(onErrorEvent, createError(Definitions.ERROR_DEVICE_NOT_SUPPORTED, Definitions.ERROR_DEVICE_NOT_SUPPORTED_MESSAGE));
+            break;
+          case ACTION_USB_NOT_OPENED:
+            Log.e(TAG, "Could not open USB serial port");
+            eventEmit(onErrorEvent, createError(Definitions.ERROR_COULD_NOT_OPEN_SERIALPORT, Definitions.ERROR_COULD_NOT_OPEN_SERIALPORT_MESSAGE));
+            break;
+          case ACTION_USB_ATTACHED: {
+            UsbDevice device = arg1.getExtras() != null ? arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE) : null;
+            if (device != null) {
+              String deviceName = device.getDeviceName();
+              Log.d(TAG, "USB device attached: " + deviceName);
+              eventEmit(onDeviceAttachedEvent, deviceName);
+              if(autoConnect && chooseFirstDevice()) {
+                connectDevice(autoConnectDeviceName, autoConnectBaudRate);
+              }
+            }
           }
+            break;
+          case ACTION_USB_DETACHED: {
+            UsbDevice device = arg1.getExtras() != null ? arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE) : null;
+            if (device != null) {
+              String deviceName = device.getDeviceName();
+              Log.d(TAG, "USB device detached: " + deviceName);
+              eventEmit(onDeviceDetachedEvent, deviceName);
+              stopConnection(deviceName);
+              serialPorts.remove(deviceName);
+              appBus2DeviceName.values().removeIf(deviceName::equals);
+            }
+          }
+            break;
+          case ACTION_USB_PERMISSION: {
+            UsbDevice device = arg1.getExtras() != null ? arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE) : null;
+            boolean granted = arg1.getExtras() != null && arg1.getExtras().getBoolean(UsbManager.EXTRA_PERMISSION_GRANTED);
+            Log.d(TAG, "USB permission " + (granted ? "granted" : "denied") + " for device: " + (device != null ? device.getDeviceName() : "null"));
+            startConnection(device, granted);
+          }
+            break;
+          case ACTION_USB_PERMISSION_GRANTED:
+            Log.d(TAG, "USB permission granted");
+            eventEmit(onUsbPermissionGranted, null);
+            break;
+          case ACTION_USB_PERMISSION_NOT_GRANTED:
+            Log.e(TAG, "USB permission not granted");
+            eventEmit(onErrorEvent, createError(Definitions.ERROR_USER_DID_NOT_ALLOW_TO_CONNECT, Definitions.ERROR_USER_DID_NOT_ALLOW_TO_CONNECT_MESSAGE));
+            break;
         }
-          break;
-        case ACTION_USB_DETACHED: {
-          UsbDevice device = arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE);
-          String deviceName = device.getDeviceName();
-          eventEmit(onDeviceDetachedEvent, deviceName);
-          stopConnection(deviceName);
-          serialPorts.remove(deviceName);
-          appBus2DeviceName.values().removeIf(deviceName::equals);
-        }
-          break;
-        case ACTION_USB_PERMISSION: {
-          UsbDevice device = arg1.getExtras().getParcelable(UsbManager.EXTRA_DEVICE);
-          boolean granted = arg1.getExtras().getBoolean(UsbManager.EXTRA_PERMISSION_GRANTED);
-          startConnection(device, granted);
-        }
-          break;
-        case ACTION_USB_PERMISSION_GRANTED:
-          eventEmit(onUsbPermissionGranted, null);
-          break;
-        case ACTION_USB_PERMISSION_NOT_GRANTED:
-          eventEmit(onErrorEvent, createError(Definitions.ERROR_USER_DID_NOT_ALLOW_TO_CONNECT, Definitions.ERROR_USER_DID_NOT_ALLOW_TO_CONNECT_MESSAGE));
-          break;
+      } catch (Exception e) {
+        Log.e(TAG, "Error in USB receiver: " + e.getMessage(), e);
+        eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, e.getMessage()));
       }
     }
   };
@@ -643,98 +667,42 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
     private UsbDeviceConnection connection;
 
     public ConnectionThread(UsbDevice device, UsbDeviceConnection connection) {
-        this.device = device;
-        this.connection = connection;
+      this.device = device;
+      this.connection = connection;
     }
 
     @Override
     public void run() {
       try {
-        UsbSerialDevice serialPort;
-        if(driver.equals("AUTO")) {
-          serialPort = UsbSerialDevice.createUsbSerialDevice(device, connection, portInterface);
+        Log.d(TAG, "Starting connection thread for device: " + device.getDeviceName());
+        UsbSerialDevice serialPort = UsbSerialDevice.createUsbSerialDevice(device, connection);
+        if (serialPort != null) {
+          if (serialPort.open()) {
+            Log.d(TAG, "USB serial port opened successfully");
+            serialPort.setBaudRate(BAUD_RATE);
+            serialPort.setDataBits(DATA_BIT);
+            serialPort.setStopBits(STOP_BIT);
+            serialPort.setParity(PARITY);
+            serialPort.setFlowControl(FLOW_CONTROL);
+            serialPorts.put(device.getDeviceName(), serialPort);
+            serialPort.read(mCallback);
+            Intent intent = new Intent(ACTION_USB_CONNECT);
+            intent.putExtra(EXTRA_USB_DEVICE_NAME, device.getDeviceName());
+            mReactContext.sendBroadcast(intent);
+          } else {
+            Log.e(TAG, "Could not open USB serial port");
+            Intent intent = new Intent(ACTION_USB_NOT_OPENED);
+            mReactContext.sendBroadcast(intent);
+          }
         } else {
-          serialPort = UsbSerialDevice.createUsbSerialDevice(driver, device, connection, portInterface);
-        }
-        if(serialPort == null) {
-          // No driver for given device
+          Log.e(TAG, "Could not create USB serial device");
           Intent intent = new Intent(ACTION_USB_NOT_SUPPORTED);
           mReactContext.sendBroadcast(intent);
-          return;
         }
-
-        if(!serialPort.open()){
-          Intent intent = new Intent(ACTION_USB_NOT_OPENED);
-          mReactContext.sendBroadcast(intent);
-          return;
-        }
-
-        serialPorts.put(device.getDeviceName(), serialPort);
-        int baud;
-        if(autoConnect){
-          baud = autoConnectBaudRate;
-        }else {
-          baud = BAUD_RATE;
-        }
-        serialPort.setBaudRate(baud);
-        serialPort.setDataBits(DATA_BIT);
-        serialPort.setStopBits(STOP_BIT);
-        serialPort.setParity(PARITY);
-        serialPort.setFlowControl(FLOW_CONTROL);
-
-        UsbSerialInterface.UsbReadCallback usbReadCallback = new UsbSerialInterface.UsbReadCallback() {
-          @Override
-          public void onReceivedData(byte[] bytes) {
-            if (bytes.length == 0) {
-              // onCatalystInstanceDestroy will cause here
-              return;
-            }
-
-            if (isNativeGateway) {
-              Gateway.onSerialportData(device.getDeviceName(), bytes, RNSerialportModule.this);
-              if (!isNativeGatewayJsEventEmitOnSerialportData) {
-                return;
-              }
-            }
-
-            try {
-
-              String payloadKey = "payload";
-
-              WritableMap params = Arguments.createMap();
-
-              if(returnedDataType == Definitions.RETURNED_DATA_TYPE_INTARRAY) {
-                WritableArray intArray = new WritableNativeArray();
-                for(byte b: bytes) {
-                  intArray.pushInt(unsignedByteToInt(b));
-                }
-                params.putArray(payloadKey, intArray);
-              } else if(returnedDataType == Definitions.RETURNED_DATA_TYPE_HEXSTRING) {
-                String hexString = Definitions.bytesToHex(bytes);
-                params.putString(payloadKey, hexString);
-              } else {
-                return;
-              }
-
-              params.putString("deviceName", device.getDeviceName());
-
-              eventEmit(onReadDataFromPort, params);
-            } catch (Exception err) {
-              eventEmit(onErrorEvent, createError(Definitions.ERROR_NOT_READED_DATA, Definitions.ERROR_NOT_READED_DATA_MESSAGE + " System Message: " + err.getMessage()));
-            }
-          }
-        };
-        serialPort.read(usbReadCallback);
-
-        Intent intent = new Intent(ACTION_USB_READY);
+      } catch (Exception e) {
+        Log.e(TAG, "Error in connection thread: " + e.getMessage(), e);
+        Intent intent = new Intent(ACTION_USB_NOT_SUPPORTED);
         mReactContext.sendBroadcast(intent);
-        intent = new Intent(ACTION_USB_CONNECT);
-        intent.putExtra(EXTRA_USB_DEVICE_NAME, device.getDeviceName());
-        mReactContext.sendBroadcast(intent);
-      } catch (Exception error) {
-        WritableMap map = createError(Definitions.ERROR_CONNECTION_FAILED, Definitions.ERROR_CONNECTION_FAILED_MESSAGE);
-        map.putString("exceptionErrorMessage", error.getMessage());
-        eventEmit(onErrorEvent, map);
       }
     }
   }
@@ -776,29 +744,23 @@ public class RNSerialportModule extends ReactContextBaseJavaModule implements Li
   }
 
   private void startConnection(UsbDevice device, boolean granted) {
-    if(granted) {
-      Intent intent = new Intent(ACTION_USB_PERMISSION_GRANTED);
-      intent.setPackage(mReactContext.getPackageName());
-      mReactContext.sendBroadcast(intent);
-      
-      try {
+    try {
+      if (granted) {
+        Log.d(TAG, "Starting USB connection for device: " + device.getDeviceName());
         UsbDeviceConnection connection = usbManager.openDevice(device);
         if (connection != null) {
           new ConnectionThread(device, connection).start();
         } else {
-          Intent errorIntent = new Intent(ACTION_USB_NOT_OPENED);
-          errorIntent.setPackage(mReactContext.getPackageName());
-          mReactContext.sendBroadcast(errorIntent);
+          Log.e(TAG, "Could not open USB connection");
+          eventEmit(onErrorEvent, createError(Definitions.ERROR_COULD_NOT_OPEN_SERIALPORT, "Could not open USB connection"));
         }
-      } catch (Exception e) {
-        WritableMap map = createError(Definitions.ERROR_CONNECTION_FAILED, Definitions.ERROR_CONNECTION_FAILED_MESSAGE);
-        map.putString("exceptionErrorMessage", e.getMessage());
-        eventEmit(onErrorEvent, map);
+      } else {
+        Log.e(TAG, "USB permission denied");
+        eventEmit(onErrorEvent, createError(Definitions.ERROR_USER_DID_NOT_ALLOW_TO_CONNECT, "USB permission denied"));
       }
-    } else {
-      Intent intent = new Intent(ACTION_USB_PERMISSION_NOT_GRANTED);
-      intent.setPackage(mReactContext.getPackageName());
-      mReactContext.sendBroadcast(intent);
+    } catch (Exception e) {
+      Log.e(TAG, "Error starting USB connection: " + e.getMessage(), e);
+      eventEmit(onErrorEvent, createError(Definitions.ERROR_UNKNOWN, e.getMessage()));
     }
   }
 
